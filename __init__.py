@@ -1,6 +1,6 @@
 import socket
 import json
-import threading
+import _thread
 
 
 BUFFER_SIZE = 4096
@@ -10,11 +10,23 @@ def _receive_fixed_length(sok, bs):
     total_data = b''
     while bs > 0:
         data = sok.recv(min(bs, BUFFER_SIZE))
-        if data == b'':
-            raise RuntimeError
         total_data += data
         bs -= len(data)
+        if data == b'':
+            break
     return total_data
+
+
+class TlaException(Exception):
+
+    def __init__(self):
+        pass
+
+
+class TlaConnectionClose(TlaException):
+
+    def __init__(self):
+        TlaException.__init__(self)
 
 
 class TransportLayerAdapter:
@@ -35,6 +47,9 @@ class TransportLayerAdapter:
     def fileno(self):
         return self.sok.fileno()
 
+    def close(self):
+        return self.sok.close()
+
 
 class TCPAdapter(TransportLayerAdapter):
 
@@ -43,13 +58,19 @@ class TCPAdapter(TransportLayerAdapter):
         TransportLayerAdapter.__init__(self, _sok)
 
     def recv_bs(self, bs):
-        return _receive_fixed_length(self.sok, bs)
+        data = _receive_fixed_length(self.sok, bs)
+        if data == b'':
+            raise TlaConnectionClose
+        return data
 
     def send(self, data):
         return self.sok.send(data)
 
     def recv(self, bs):
-        return self.sok.recv(bs)
+        data = self.sok.recv(bs)
+        if data == b'':
+            raise TlaConnectionClose
+        return data
 
     def listen(self):
         return self.sok.listen()
@@ -79,6 +100,9 @@ class JHTPBase:
     def fileno(self):
         return self.tla.fileno()
 
+    def close(self):
+        return self.tla.close()
+
 
 class JHTPServer(JHTPBase):
 
@@ -103,7 +127,7 @@ class JHTPPeer(JHTPBase):
 
     def __init__(self, tla=None):
         JHTPBase.__init__(self, tla)
-        self._send_lock = threading.Lock()
+        self._send_lock = _thread.allocate_lock()
 
     def send(self, head=None, body=b''):
         payload_head = b''
