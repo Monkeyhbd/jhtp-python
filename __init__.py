@@ -142,14 +142,14 @@ class JHTPPeer(JHTPBase):
         protocol_head = json.dumps(protocol_head_dict).encode('utf-8')
         head_length = len(protocol_head)
         self._send_lock.acquire()
-        self.tla.send(head_length.to_bytes(length=2, signed=False))
+        self.tla.send(head_length.to_bytes(length=2, signed=False, byteorder='little'))
         self.tla.send(protocol_head)
         self.tla.send(payload_head)
         self.tla.send(payload_body)
         self._send_lock.release()
 
     def recv(self):
-        head_length = int.from_bytes(self.tla.recv(2), signed=False)
+        head_length = int.from_bytes(self.tla.recv(2), signed=False, byteorder='little')
         protocol_head = self.tla.recv_bs(head_length)
         protocol_head_dict = json.loads(protocol_head.decode('utf-8'))
         payload_head_length = protocol_head_dict['head_length']
