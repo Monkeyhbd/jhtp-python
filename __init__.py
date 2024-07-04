@@ -1,7 +1,7 @@
 import socket
 import json
 import _thread
-
+import time
 
 BUFFER_SIZE = 4096
 
@@ -39,15 +39,23 @@ class TlaException(Exception):
 
 class TlaConnectionClose(TlaException):
 
+    def __init__(self, addr=None):
+        TlaException.__init__(self)
+        _log('TLA connection closed by peer {}.'.format(addr))
+
+
+class TlaConnectionRefuse(TlaException):
+
     def __init__(self):
         TlaException.__init__(self)
-        _log('TLA connection closed by peer.')
+        _log('TLA connection refused by remote.')
 
 
 class TransportLayerAdapter:
 
-    def __init__(self, sok):
+    def __init__(self, sok, addr=None):
         self.sok = sok
+        self.addr = addr  # remote addr
 
     def recv_bs(self, bs):
         """ Receive fixed bytes(bs) of data. """
@@ -68,43 +76,60 @@ class TransportLayerAdapter:
 
 class TCPAdapter(TransportLayerAdapter):
 
-    def __init__(self, sok=None):
+    def __init__(self, sok=None, addr=None):
         _sok = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if sok is None else sok
-        TransportLayerAdapter.__init__(self, _sok)
+        TransportLayerAdapter.__init__(self, _sok, addr)
 
     def recv_bs(self, bs):
-        data = _receive_fixed_length(self.sok, bs)
-        if data == b'':
-            raise TlaConnectionClose
-        return data
+        try:
+            data = _receive_fixed_length(self.sok, bs)
+            if data == b'':
+                raise TlaConnectionClose(self.addr)
+            return data
+        except ConnectionResetError:
+            raise TlaConnectionClose(self.addr)
 
     def send(self, data):
-        return self.sok.send(data)
+        try:
+            rtn = self.sok.send(data)
+            return rtn
+        except BrokenPipeError:
+            raise TlaConnectionClose(self.addr)
 
-    def recv(self, bs):
-        data = self.sok.recv(bs)
-        if data == b'':
-            raise TlaConnectionClose
-        return data
+    recv = recv_bs
 
     def listen(self):
         _log('TLA listening incoming connection...')
-        rtn = self.sok.listen()
-        return rtn
+        self.sok.listen()
 
     def accept(self):
         conn, addr = self.sok.accept()
         _log('TLA accept connection {}'.format(addr))
-        return TCPAdapter(conn), addr
+        return TCPAdapter(conn, addr), addr
 
     def connect(self, addr):
-        _log('TLA connection establishing...')
-        rtn = self.sok.connect(addr)
-        _log('TLA connection established.')
-        return rtn
+        self.addr = addr
+        try:
+            _log('TLA connection establishing...')
+            self.sok.connect(addr)
+            _log('TLA connection established.')
+        except ConnectionRefusedError:
+            raise TlaConnectionRefuse
 
     def bind(self, addr):
         return self.sok.bind(addr)
+
+    def reconnect(self, addr=None, timeout=3):
+        _log('TLA try to reconnect...')
+        self.sok = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addr = self.addr if addr is None else addr
+        while True:
+            try:
+                self.connect(self.addr)
+                break
+            except TlaConnectionRefuse:
+                time.sleep(timeout)
+                continue
 
 
 class JHTPBase:
@@ -210,3 +235,6 @@ class JHTPClient(JHTPPeer):
     def connect(self, host, port):
         self.remote_addr = (host, port)
         self.tla.connect(self.remote_addr)
+
+    def reconnect(self, **kv):
+        self.tla.reconnect(**kv)
