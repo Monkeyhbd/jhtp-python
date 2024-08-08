@@ -117,6 +117,7 @@ class TCPAdapter(TransportLayerAdapter):
             raise TlaConnectionRefuse
 
     def bind(self, addr):
+        self.sok.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return self.sok.bind(addr)
 
     def reconnect(self, addr=None, timeout=3):
@@ -193,7 +194,7 @@ class JHTPPeer(JHTPBase):
         _log('Head length is {}'.format(head_length), 2)
         self._send_lock.acquire()
         _log('Sending head length...', 2)
-        self.tla.send(head_length.to_bytes(length=2, signed=False, byteorder='little'))
+        self.tla.send(head_length.to_bytes(2, 'little'))
         _log('Sending protocol head...', 2)
         self.tla.send(protocol_head)
         _log('Sending payload head...', 2)
@@ -206,7 +207,7 @@ class JHTPPeer(JHTPBase):
     def recv(self):
         _log('Receive start.')
         _log('Receiving head length...', 2)
-        head_length = int.from_bytes(self.tla.recv(2), signed=False, byteorder='little')
+        head_length = int.from_bytes(self.tla.recv(2), 'little')
         _log('Head length is {}'.format(head_length), 2)
         _log('Receiving protocol head...', 2)
         protocol_head = self.tla.recv_bs(head_length)
