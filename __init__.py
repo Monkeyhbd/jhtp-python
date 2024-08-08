@@ -182,11 +182,10 @@ class JHTPPeer(JHTPBase):
         payload_body = body
         if type(head) is dict:
             payload_head = json.dumps(head).encode('utf-8')
-        # _log('Payload head is {}'.format(head))
         protocol_head_dict = {
-            'version': '0.1',
-            'head_length': len(payload_head),
-            'body_length': len(payload_body)
+            'Version': '0.1',
+            'Head_Length': len(payload_head),
+            'Body_Length': len(payload_body)
         }
         protocol_head = json.dumps(protocol_head_dict).encode('utf-8')
         _log('Send head {}'.format(protocol_head_dict))
@@ -213,8 +212,8 @@ class JHTPPeer(JHTPBase):
         protocol_head = self.tla.recv_bs(head_length)
         protocol_head_dict = json.loads(protocol_head.decode('utf-8'))
         _log('Receive head {}'.format(protocol_head_dict))
-        payload_head_length = protocol_head_dict['head_length']
-        payload_body_length = protocol_head_dict['body_length']
+        payload_head_length = protocol_head_dict['Head_Length']
+        payload_body_length = protocol_head_dict['Body_Length']
         _log('Receiving payload head...', 2)
         if payload_head_length == 0:
             payload_head_dict = None
